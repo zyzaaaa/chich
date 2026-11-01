@@ -6,9 +6,9 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
--- Настройки Сайлент-аима
+-- Настройки
 local SilentAimEnabled = false
-local FOV_Radius = 125
+local FOV_Radius = 120 -- Начальный размер FOV
 local ShowFOV = true
 
 -- Ссылка на иконку (котик)
@@ -21,7 +21,7 @@ ScreenGui.Parent = success and parent or LocalPlayer:WaitForChild("PlayerGui")
 ScreenGui.Name = "Delta_CBRO_Menu"
 ScreenGui.ResetOnSpawn = false
 
--- --- 1. КРУГЛАЯ КНОПКА-ИКОНКА ---
+-- --- КРУГЛАЯ КНОПКА-ИКОНКА ---
 local ToggleButton = Instance.new("ImageButton")
 local ToggleCorner = Instance.new("UICorner")
 
@@ -37,18 +37,21 @@ ToggleButton.Draggable = true
 ToggleCorner.CornerRadius = UDim.new(1, 0)
 ToggleCorner.Parent = ToggleButton
 
--- --- 2. ГЛАВНОЕ МЕНЮ ---
+-- --- ГЛАВНОЕ МЕНЮ (Увеличили высоту под настройку FOV) ---
 local MainFrame = Instance.new("Frame")
 local UICorner = Instance.new("UICorner")
 local Title = Instance.new("TextLabel")
 local EspButton = Instance.new("TextButton")
 local AimButton = Instance.new("TextButton")
+local FovPlusBtn = Instance.new("TextButton")
+local FovMinusBtn = Instance.new("TextButton")
+local FovLabel = Instance.new("TextLabel")
 
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.Position = UDim2.new(0.12, 0, 0.1, 0)
-MainFrame.Size = UDim2.new(0, 180, 0, 160)
+MainFrame.Size = UDim2.new(0, 180, 0, 210)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
 
@@ -97,10 +100,11 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-local function createButton(btn, text, yPos)
+-- Создание кнопок интерфейса
+local function createButton(btn, text, yPos, height)
     btn.Parent = MainFrame
     btn.Position = UDim2.new(0.05, 0, 0, yPos)
-    btn.Size = UDim2.new(0.9, 0, 0, 40)
+    btn.Size = UDim2.new(0.9, 0, 0, height or 40)
     btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -115,6 +119,34 @@ end
 
 createButton(EspButton, "ESP: OFF", 45)
 createButton(AimButton, "SILENT AIM: OFF", 95)
+
+-- Кнопки регулировки FOV прямо в меню
+FovLabel.Parent = MainFrame
+FovLabel.Position = UDim2.new(0.05, 0, 0, 145)
+FovLabel.Size = UDim2.new(0.9, 0, 0, 20)
+FovLabel.BackgroundTransparency = 1
+FovLabel.Text = "FOV: " .. FOV_Radius
+FovLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+FovLabel.Font = Enum.Font.Gotham
+FovLabel.TextSize = 12
+
+createButton(FovMinusBtn, "-", 170, 30)
+FovMinusBtn.Size = UDim2.new(0.42, 0, 0, 30)
+FovMinusBtn.Position = UDim2.new(0.05, 0, 0, 170)
+
+createButton(FovPlusBtn, "+", 170, 30)
+FovPlusBtn.Size = UDim2.new(0.42, 0, 0, 30)
+FovPlusBtn.Position = UDim2.new(0.53, 0, 0, 170)
+
+FovMinusBtn.MouseButton1Click:Connect(function()
+    FOV_Radius = math.clamp(FOV_Radius - 15, 30, 400)
+    FovLabel.Text = "FOV: " .. FOV_Radius
+end)
+
+FovPlusBtn.MouseButton1Click:Connect(function()
+    FOV_Radius = math.clamp(FOV_Radius + 15, 30, 400)
+    FovLabel.Text = "FOV: " .. FOV_Radius
+end)
 
 -- Проверка на врага
 local function isEnemy(player)
@@ -134,7 +166,7 @@ local function isEnemy(player)
     return true
 end
 
--- Функция проверки: виден ли враг (нет ли преград на пути от камеры до головы)
+-- Проверка видимости (Луч от камеры до головы)
 local function isVisible(targetPart)
     if not targetPart then return false end
     local origin = Camera.CFrame.Position
@@ -143,7 +175,6 @@ local function isVisible(targetPart)
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = RaycastParams.FilterType.Exclude
     
-    -- Игнорируем своего персонажа и самого противника при проверке луча
     local ignoreList = {LocalPlayer.Character}
     if targetPart.Parent then
         table.insert(ignoreList, targetPart.Parent)
@@ -151,14 +182,10 @@ local function isVisible(targetPart)
     raycastParams.FilterDescendantsInstances = ignoreList
     
     local result = Workspace:Raycast(origin, direction, raycastParams)
-    -- Если луч долетел до цели и ни во что не врезался по пути — значит враг виден
-    if not result then
-        return true
-    end
-    return false
+    return result == nil
 end
 
--- --- 3. ESP С ПРОВЕРКОЙ ВИДИМОСТИ (Зеленый / Красный) ---
+-- --- 1. СТАБИЛЬНЫЙ ESP ---
 local espEnabled = false
 local function toggleEsp()
     espEnabled = not espEnabled
@@ -191,7 +218,6 @@ RunService.RenderStepped:Connect(function()
                         hl.OutlineTransparency = 0
                     end
                     
-                    -- Проверяем видимость: виден = зеленый, за стеной = красный
                     if isVisible(head) then
                         hl.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый (виден)
                     else
@@ -207,14 +233,13 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- --- 4. КРУГ FOV ---
+-- --- 2. ВИЗУАЛЬНЫЙ КРУГ FOV ---
 local FOV_Circle = Drawing.new("Circle")
 FOV_Circle.Visible = false
 FOV_Circle.Transparency = 0.7
 FOV_Circle.Color = Color3.fromRGB(255, 255, 255)
 FOV_Circle.Thickness = 1
 FOV_Circle.Filled = false
-FOV_Circle.Radius = FOV_Radius
 
 RunService.RenderStepped:Connect(function()
     if SilentAimEnabled and ShowFOV then
@@ -226,7 +251,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- --- 5. SILENT AIM ---
+-- --- 3. ИСПРАВЛЕННЫЙ SILENT AIM ---
 local function getClosestEnemyInFOV()
     local closestTarget = nil
     local shortestDistance = FOV_Radius
@@ -257,6 +282,7 @@ local function toggleAim()
     AimButton.BackgroundColor3 = SilentAimEnabled and Color3.fromRGB(0, 180, 100) or Color3.fromRGB(45, 45, 45)
 end
 
+-- Перехват лучей для сайлент-аима
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -277,3 +303,4 @@ end)
 
 EspButton.MouseButton1Click:Connect(toggleEsp)
 AimButton.MouseButton1Click:Connect(toggleAim)
+
