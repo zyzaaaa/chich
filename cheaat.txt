@@ -4,36 +4,37 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = game:GetService("Workspace").CurrentCamera
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 -- Настройки Сайлент-аима
 local SilentAimEnabled = false
-local FOV_Radius = 120 -- Размер круга FOV (можно менять под себя)
-local ShowFOV = true   -- Рисовать ли круг FOV на экране
+local FOV_Radius = 125
+local ShowFOV = true
 
--- Сюда можно вставить ID вашей картинки в Roblox (сейчас стоит стандартный пример)
-local IconAssetID = "rbxassetid://6023426915" -- Замените на свой ID, если нужно
+-- Ссылка на иконку (котик)
+local IconAssetID = "rbxassetid://6023426915"
 
--- Создание GUI (Защита от краша Delta)
+-- Создание GUI
 local ScreenGui = Instance.new("ScreenGui")
 local success, parent = pcall(function() return game:GetService("CoreGui") end)
 ScreenGui.Parent = success and parent or LocalPlayer:WaitForChild("PlayerGui")
 ScreenGui.Name = "Delta_CBRO_Menu"
 ScreenGui.ResetOnSpawn = false
 
--- --- 1. КРУГЛАЯ КНОПКА-ИКОНКА (Плавающая) ---
+-- --- 1. КРУГЛАЯ КНОПКА-ИКОНКА ---
 local ToggleButton = Instance.new("ImageButton")
 local ToggleCorner = Instance.new("UICorner")
 
 ToggleButton.Name = "ToggleButton"
 ToggleButton.Parent = ScreenGui
 ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ToggleButton.Position = UDim2.new(0.05, 0, 0.1, 0) -- Позиция круга на экране
-ToggleButton.Size = UDim2.new(0, 50, 0, 50)          -- Размер круга (50x50 пикселей)
+ToggleButton.Position = UDim2.new(0.05, 0, 0.1, 0)
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
 ToggleButton.Image = IconAssetID
 ToggleButton.BorderSizePixel = 0
-ToggleButton.Draggable = true -- Круг тоже можно двигать пальцем/мышкой по экрану!
+ToggleButton.Draggable = true
 
-ToggleCorner.CornerRadius = UDim.new(1, 0) -- Делает кнопку идеальным кругом
+ToggleCorner.CornerRadius = UDim.new(1, 0)
 ToggleCorner.Parent = ToggleButton
 
 -- --- 2. ГЛАВНОЕ МЕНЮ ---
@@ -49,17 +50,15 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.Position = UDim2.new(0.12, 0, 0.1, 0)
 MainFrame.Size = UDim2.new(0, 180, 0, 160)
 MainFrame.BorderSizePixel = 0
-MainFrame.Visible = false -- Меню изначально свернуто, открывается по клику на круг!
+MainFrame.Visible = false
 
 UICorner.CornerRadius = UDim.new(0, 10)
 UICorner.Parent = MainFrame
 
--- Логика открытия/закрытия меню по клику на круг
 ToggleButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
--- Заголовок меню
 Title.Parent = MainFrame
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -72,7 +71,7 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 10)
 TitleCorner.Parent = Title
 
--- Скрипт плавного перетаскивания главного меню
+-- Перетаскивание меню
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -98,7 +97,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Функция создания кнопок
 local function createButton(btn, text, yPos)
     btn.Parent = MainFrame
     btn.Position = UDim2.new(0.05, 0, 0, yPos)
@@ -118,7 +116,49 @@ end
 createButton(EspButton, "ESP: OFF", 45)
 createButton(AimButton, "SILENT AIM: OFF", 95)
 
--- --- 3. РАБОЧИЙ ESP ---
+-- Проверка на врага
+local function isEnemy(player)
+    if player == LocalPlayer then return false end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return false end
+    
+    if player.Team and LocalPlayer.Team then
+        if player.Team == LocalPlayer.Team then
+            return false
+        end
+    end
+    
+    if player.TeamColor == LocalPlayer.TeamColor then
+        return false
+    end
+    
+    return true
+end
+
+-- Функция проверки: виден ли враг (нет ли преград на пути от камеры до головы)
+local function isVisible(targetPart)
+    if not targetPart then return false end
+    local origin = Camera.CFrame.Position
+    local direction = targetPart.Position - origin
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = RaycastParams.FilterType.Exclude
+    
+    -- Игнорируем своего персонажа и самого противника при проверке луча
+    local ignoreList = {LocalPlayer.Character}
+    if targetPart.Parent then
+        table.insert(ignoreList, targetPart.Parent)
+    end
+    raycastParams.FilterDescendantsInstances = ignoreList
+    
+    local result = Workspace:Raycast(origin, direction, raycastParams)
+    -- Если луч долетел до цели и ни во что не врезался по пути — значит враг виден
+    if not result then
+        return true
+    end
+    return false
+end
+
+-- --- 3. ESP С ПРОВЕРКОЙ ВИДИМОСТИ (Зеленый / Красный) ---
 local espEnabled = false
 local function toggleEsp()
     espEnabled = not espEnabled
@@ -137,21 +177,25 @@ end
 RunService.RenderStepped:Connect(function()
     if espEnabled then
         for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character then
-                local isEnemy = true
-                if p.Team and LocalPlayer.Team and p.Team == LocalPlayer.Team then
-                    isEnemy = false
-                end
-                
-                if isEnemy then
-                    if not p.Character:FindFirstChild("DeltaESP") then
-                        local hl = Instance.new("Highlight")
+            if p.Character then
+                if isEnemy(p) then
+                    local head = p.Character:FindFirstChild("Head")
+                    local hl = p.Character:FindFirstChild("DeltaESP")
+                    
+                    if not hl then
+                        hl = Instance.new("Highlight")
                         hl.Name = "DeltaESP"
                         hl.Parent = p.Character
-                        hl.FillColor = Color3.fromRGB(255, 50, 50)
                         hl.OutlineColor = Color3.fromRGB(255, 255, 255)
                         hl.FillTransparency = 0.4
                         hl.OutlineTransparency = 0
+                    end
+                    
+                    -- Проверяем видимость: виден = зеленый, за стеной = красный
+                    if isVisible(head) then
+                        hl.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый (виден)
+                    else
+                        hl.FillColor = Color3.fromRGB(255, 0, 0) -- Красный (за стеной)
                     end
                 else
                     if p.Character:FindFirstChild("DeltaESP") then
@@ -163,7 +207,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- --- 4. ВИЗУАЛИЗАЦИЯ КРУГА FOV ---
+-- --- 4. КРУГ FOV ---
 local FOV_Circle = Drawing.new("Circle")
 FOV_Circle.Visible = false
 FOV_Circle.Transparency = 0.7
@@ -176,7 +220,7 @@ RunService.RenderStepped:Connect(function()
     if SilentAimEnabled and ShowFOV then
         FOV_Circle.Visible = true
         FOV_Circle.Radius = FOV_Radius
-        FOV_Circle.Position = UserInputService:GetMouseLocation()
+        FOV_Circle.Position = Camera.ViewportSize / 2
     else
         FOV_Circle.Visible = false
     end
@@ -186,27 +230,20 @@ end)
 local function getClosestEnemyInFOV()
     local closestTarget = nil
     local shortestDistance = FOV_Radius
-    local mousePos = UserInputService:GetMouseLocation()
+    local screenCenter = Camera.ViewportSize / 2
     
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
-            local isEnemy = true
-            if p.Team and LocalPlayer.Team and p.Team == LocalPlayer.Team then
-                isEnemy = false
-            end
+        if isEnemy(p) and p.Character:FindFirstChild("Head") then
+            local head = p.Character.Head
+            local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
             
-            if isEnemy then
-                local head = p.Character.Head
-                local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
+            if onScreen then
+                local targetScreenPos = Vector2.new(screenPos.X, screenPos.Y)
+                local distance = (screenCenter - targetScreenPos).Magnitude
                 
-                if onScreen then
-                    local targetScreenPos = Vector2.new(screenPos.X, screenPos.Y)
-                    local distance = (mousePos - targetScreenPos).Magnitude
-                    
-                    if distance < shortestDistance then
-                        shortestDistance = distance
-                        closestTarget = head
-                    end
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    closestTarget = head
                 end
             end
         end
@@ -238,6 +275,5 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     return oldNamecall(self, ...)
 end)
 
--- Обработка нажатий кнопок
 EspButton.MouseButton1Click:Connect(toggleEsp)
 AimButton.MouseButton1Click:Connect(toggleAim)
