@@ -6,12 +6,9 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
--- Настройки
+local FOV_Radius = 120
 local SilentAimEnabled = false
-local FOV_Radius = 120 -- Начальный размер FOV
 local ShowFOV = true
-
--- Ссылка на иконку (котик)
 local IconAssetID = "rbxassetid://6023426915"
 
 -- Создание GUI
@@ -21,11 +18,9 @@ ScreenGui.Parent = success and parent or LocalPlayer:WaitForChild("PlayerGui")
 ScreenGui.Name = "Delta_CBRO_Menu"
 ScreenGui.ResetOnSpawn = false
 
--- --- КРУГЛАЯ КНОПКА-ИКОНКА ---
+-- Кнопка-иконка (котик)
 local ToggleButton = Instance.new("ImageButton")
 local ToggleCorner = Instance.new("UICorner")
-
-ToggleButton.Name = "ToggleButton"
 ToggleButton.Parent = ScreenGui
 ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 ToggleButton.Position = UDim2.new(0.05, 0, 0.1, 0)
@@ -33,28 +28,22 @@ ToggleButton.Size = UDim2.new(0, 50, 0, 50)
 ToggleButton.Image = IconAssetID
 ToggleButton.BorderSizePixel = 0
 ToggleButton.Draggable = true
-
 ToggleCorner.CornerRadius = UDim.new(1, 0)
 ToggleCorner.Parent = ToggleButton
 
--- --- ГЛАВНОЕ МЕНЮ (Увеличили высоту под настройку FOV) ---
+-- Меню
 local MainFrame = Instance.new("Frame")
 local UICorner = Instance.new("UICorner")
 local Title = Instance.new("TextLabel")
 local EspButton = Instance.new("TextButton")
 local AimButton = Instance.new("TextButton")
-local FovPlusBtn = Instance.new("TextButton")
-local FovMinusBtn = Instance.new("TextButton")
-local FovLabel = Instance.new("TextLabel")
 
-MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.Position = UDim2.new(0.12, 0, 0.1, 0)
-MainFrame.Size = UDim2.new(0, 180, 0, 210)
+MainFrame.Size = UDim2.new(0, 180, 0, 160)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
-
 UICorner.CornerRadius = UDim.new(0, 10)
 UICorner.Parent = MainFrame
 
@@ -81,11 +70,6 @@ MainFrame.InputBegan:Connect(function(input)
         dragging = true
         dragStart = input.Position
         startPos = MainFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
     end
 end)
 MainFrame.InputChanged:Connect(function(input)
@@ -100,94 +84,39 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Создание кнопок интерфейса
-local function createButton(btn, text, yPos, height)
+local function createButton(btn, text, yPos)
     btn.Parent = MainFrame
     btn.Position = UDim2.new(0.05, 0, 0, yPos)
-    btn.Size = UDim2.new(0.9, 0, 0, height or 40)
+    btn.Size = UDim2.new(0.9, 0, 0, 40)
     btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Font = Enum.Font.Gotham
     btn.TextSize = 13
     btn.BorderSizePixel = 0
-    
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 6)
-    btnCorner.Parent = btn
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = btn
 end
 
 createButton(EspButton, "ESP: OFF", 45)
 createButton(AimButton, "SILENT AIM: OFF", 95)
 
--- Кнопки регулировки FOV прямо в меню
-FovLabel.Parent = MainFrame
-FovLabel.Position = UDim2.new(0.05, 0, 0, 145)
-FovLabel.Size = UDim2.new(0.9, 0, 0, 20)
-FovLabel.BackgroundTransparency = 1
-FovLabel.Text = "FOV: " .. FOV_Radius
-FovLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-FovLabel.Font = Enum.Font.Gotham
-FovLabel.TextSize = 12
-
-createButton(FovMinusBtn, "-", 170, 30)
-FovMinusBtn.Size = UDim2.new(0.42, 0, 0, 30)
-FovMinusBtn.Position = UDim2.new(0.05, 0, 0, 170)
-
-createButton(FovPlusBtn, "+", 170, 30)
-FovPlusBtn.Size = UDim2.new(0.42, 0, 0, 30)
-FovPlusBtn.Position = UDim2.new(0.53, 0, 0, 170)
-
-FovMinusBtn.MouseButton1Click:Connect(function()
-    FOV_Radius = math.clamp(FOV_Radius - 15, 30, 400)
-    FovLabel.Text = "FOV: " .. FOV_Radius
-end)
-
-FovPlusBtn.MouseButton1Click:Connect(function()
-    FOV_Radius = math.clamp(FOV_Radius + 15, 30, 400)
-    FovLabel.Text = "FOV: " .. FOV_Radius
-end)
-
--- Проверка на врага
-local function isEnemy(player)
-    if player == LocalPlayer then return false end
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return false end
-    
-    if player.Team and LocalPlayer.Team then
-        if player.Team == LocalPlayer.Team then
-            return false
-        end
-    end
-    
-    if player.TeamColor == LocalPlayer.TeamColor then
-        return false
-    end
-    
-    return true
-end
-
--- Проверка видимости (Луч от камеры до головы)
+-- Функция проверки видимости
 local function isVisible(targetPart)
     if not targetPart then return false end
     local origin = Camera.CFrame.Position
     local direction = targetPart.Position - origin
-    
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = RaycastParams.FilterType.Exclude
-    
-    local ignoreList = {LocalPlayer.Character}
-    if targetPart.Parent then
-        table.insert(ignoreList, targetPart.Parent)
-    end
-    raycastParams.FilterDescendantsInstances = ignoreList
-    
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, targetPart.Parent}
     local result = Workspace:Raycast(origin, direction, raycastParams)
     return result == nil
 end
 
--- --- 1. СТАБИЛЬНЫЙ ESP ---
+-- 1. ESP ЛОГИКА
 local espEnabled = false
-local function toggleEsp()
+EspButton.MouseButton1Click:Connect(function()
     espEnabled = not espEnabled
     EspButton.Text = espEnabled and "ESP: ON" or "ESP: OFF"
     EspButton.BackgroundColor3 = espEnabled and Color3.fromRGB(0, 180, 100) or Color3.fromRGB(45, 45, 45)
@@ -199,41 +128,35 @@ local function toggleEsp()
             end
         end
     end
-end
+end)
 
 RunService.RenderStepped:Connect(function()
     if espEnabled then
         for _, p in pairs(Players:GetPlayers()) do
-            if p.Character then
-                if isEnemy(p) then
-                    local head = p.Character:FindFirstChild("Head")
-                    local hl = p.Character:FindFirstChild("DeltaESP")
-                    
-                    if not hl then
-                        hl = Instance.new("Highlight")
-                        hl.Name = "DeltaESP"
-                        hl.Parent = p.Character
-                        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        hl.FillTransparency = 0.4
-                        hl.OutlineTransparency = 0
-                    end
-                    
-                    if isVisible(head) then
-                        hl.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый (виден)
-                    else
-                        hl.FillColor = Color3.fromRGB(255, 0, 0) -- Красный (за стеной)
-                    end
+            if p ~= LocalPlayer and p.Character then
+                local head = p.Character:FindFirstChild("Head")
+                local hl = p.Character:FindFirstChild("DeltaESP")
+                
+                if not hl then
+                    hl = Instance.new("Highlight")
+                    hl.Name = "DeltaESP"
+                    hl.Parent = p.Character
+                    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    hl.FillTransparency = 0.4
+                    hl.OutlineTransparency = 0
+                end
+                
+                if isVisible(head) then
+                    hl.FillColor = Color3.fromRGB(0, 255, 0) -- Зеленый (виден)
                 else
-                    if p.Character:FindFirstChild("DeltaESP") then
-                        p.Character.DeltaESP:Destroy()
-                    end
+                    hl.FillColor = Color3.fromRGB(255, 0, 0) -- Красный (за стеной)
                 end
             end
         end
     end
 end)
 
--- --- 2. ВИЗУАЛЬНЫЙ КРУГ FOV ---
+-- 2. КРУГ FOV
 local FOV_Circle = Drawing.new("Circle")
 FOV_Circle.Visible = false
 FOV_Circle.Transparency = 0.7
@@ -251,14 +174,14 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- --- 3. ИСПРАВЛЕННЫЙ SILENT AIM ---
+-- 3. SILENT AIM ЛОГИКА
 local function getClosestEnemyInFOV()
     local closestTarget = nil
     local shortestDistance = FOV_Radius
     local screenCenter = Camera.ViewportSize / 2
     
     for _, p in pairs(Players:GetPlayers()) do
-        if isEnemy(p) and p.Character:FindFirstChild("Head") then
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
             local head = p.Character.Head
             local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
             
@@ -276,13 +199,12 @@ local function getClosestEnemyInFOV()
     return closestTarget
 end
 
-local function toggleAim()
+AimButton.MouseButton1Click:Connect(function()
     SilentAimEnabled = not SilentAimEnabled
     AimButton.Text = SilentAimEnabled and "SILENT AIM: ON" or "SILENT AIM: OFF"
     AimButton.BackgroundColor3 = SilentAimEnabled and Color3.fromRGB(0, 180, 100) or Color3.fromRGB(45, 45, 45)
-end
+end)
 
--- Перехват лучей для сайлент-аима
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -300,7 +222,3 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     
     return oldNamecall(self, ...)
 end)
-
-EspButton.MouseButton1Click:Connect(toggleEsp)
-AimButton.MouseButton1Click:Connect(toggleAim)
-
